@@ -41,10 +41,11 @@ it offers.
 | `temperature` | Sampling temperature, 0–2 (lower = more deterministic). Applied when the model supports it; OpenRouter drops it for models that don't. |
 
 > **Note for agents (MCP or CLI):** if a call fails or any error occurs — timeout, rate limit,
-> model rejection, provider outage — do **not** downgrade or change the configuration the user set
-> (model, reasoning level/budget, temperature, Fusion panel/judge) without their direct say-so.
-> Retrying the same call is fine; otherwise report the error and ask. This rule is also baked into
-> the server's MCP `instructions` and the CLI `--help`.
+> model rejection, provider outage — **retry the exact same call first** (waiting briefly for
+> transient errors). If it keeps failing, report the error and **ask**; do **not** downgrade or
+> change the configuration the user set (model, reasoning level/budget, temperature, Fusion
+> panel/judge) without their direct say-so. This rule is also baked into the server's MCP
+> `instructions` and the CLI `--help`.
 
 ---
 
