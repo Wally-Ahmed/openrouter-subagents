@@ -21,7 +21,7 @@ subscription), and it ships the same **orchestration patterns** system.
 | `list_patterns` / `get_pattern` | Orchestration patterns for driving the model well (see below). |
 
 **Fusion cost:** a Fusion call bills for **every panel model plus the judge**. Reach for it when
-multiple perspectives are worth the spend (research, expert critique, high cost-of-being-wrong); for
+multiple perspectives are worth the spend (research, critique, high cost-of-being-wrong); for
 quick tactical prompts pass a single model id instead.
 
 ### Reasoning & sampling controls
@@ -74,7 +74,7 @@ openrouter-subagents patterns
 openrouter-subagents pattern two-layer-cross-model-expert
 ```
 
-Flags mirror the MCP tool: `-m/--model`, `-i/--instructions` (defaults to a terse expert prompt),
+Flags mirror the MCP tool: `-m/--model`, `-i/--instructions` (defaults to a terse general-purpose prompt),
 `-p/--prompt`, `-c/--context` (each with a `--*-file` variant), `-e/--effort`
 (`none`…`max`), `--reasoning-tokens <n>`, `--reasoning on|off`, `--hide-reasoning`,
 `-t/--temperature`, and Fusion's `--analysis-models` / `--judge`. `--help` shows the full
