@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Two-Layer Cross-Model Expert Pattern</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --ink:#e6edf3; --muted:#8b949e;
+    --claude:#d97757; --gpt:#10a37f; --main:#6e7bf2; --edge:#30363d;
+    --crit:#f85149; --high:#d29922; --ok:#3fb950;
+    --mono:'SF Mono',ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;padding:40px 20px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:30px;margin:0 0 6px}
+  .sub{color:var(--muted);margin:0 0 28px;font-size:15px}
+  h2{font-size:20px;margin:40px 0 14px;border-bottom:1px solid var(--edge);padding-bottom:8px}
+  code{font-family:var(--mono);background:#1f2630;padding:2px 6px;border-radius:5px;font-size:13px}
+
+  /* ── flow diagram ── */
+  .flow{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:30px 24px;margin:18px 0}
+  .tier-label{font-family:var(--mono);font-size:12px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin:0 0 10px}
+  .row{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+  .node{flex:1;min-width:210px;border-radius:12px;padding:16px 16px;border:1px solid var(--edge);background:var(--panel2)}
+  .node h3{margin:0 0 6px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .node p{margin:0;font-size:13px;color:var(--muted)}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:0 0 auto}
+  .main .dot{background:var(--main)} .claude .dot{background:var(--claude)} .gpt .dot{background:var(--gpt)}
+  .main{border-color:var(--main)} .claude{border-color:var(--claude)} .gpt{border-color:var(--gpt)}
+  .arrow{text-align:center;color:var(--muted);font-size:13px;margin:12px 0;font-family:var(--mono)}
+  .arrow b{color:var(--ink)}
+  .single{max-width:580px;margin:0 auto}
+
+  /* ── steps inside wrapper subagent ── */
+  .steps{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .step{flex:1;min-width:130px;background:#11161e;border:1px dashed var(--edge);border-radius:9px;padding:10px;font-size:12px}
+  .step b{color:var(--claude)}
+
+  /* ── why table ── */
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+  th,td{border:1px solid var(--edge);padding:10px 12px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+  td.naive{color:var(--muted)}
+  .tag{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:20px;font-weight:600}
+  .t-crit{background:rgba(248,81,73,.15);color:var(--crit)}
+  .t-high{background:rgba(210,153,34,.15);color:var(--high)}
+  .t-ok{background:rgba(63,185,80,.15);color:var(--ok)}
+
+  .bundle{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
+  .bcard{flex:1;min-width:200px;background:var(--panel);border:1px solid var(--edge);border-left:3px solid var(--gpt);border-radius:9px;padding:12px}
+  .bcard h4{margin:0 0 4px;font-size:13px} .bcard p{margin:0;font-size:12px;color:var(--muted)}
+
+  .callout{background:var(--panel);border:1px solid var(--edge);border-left:3px solid var(--main);border-radius:9px;padding:14px 16px;margin:14px 0;font-size:14px}
+  .footer{color:var(--muted);font-size:12px;margin-top:40px;text-align:center}
+  ul{margin:8px 0 0;padding-left:20px} li{margin:5px 0;font-size:14px}
+  ol.moves{counter-reset:m;list-style:none;padding-left:0}
+  ol.moves li{position:relative;padding:10px 12px 10px 46px;margin:8px 0;background:var(--panel);border:1px solid var(--edge);border-radius:9px}
+  ol.moves li::before{counter-increment:m;content:counter(m);position:absolute;left:12px;top:10px;width:24px;height:24px;border-radius:50%;background:var(--main);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px}
+  ol.moves b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Two-Layer Cross-Model Expert Pattern</h1>
+  <p class="sub">A reusable way to put an external "expert" model (reached over MCP) to work inside an agent loop — wrapping it in orchestrating subagents so its output stays <b>parallel, context-cheap, and trustworthy</b>.</p>
+
+  <!-- ───────────── FLOW DIAGRAM ───────────── -->
+  <div class="flow">
+    <p class="tier-label">Layer 0 · Orchestrator</p>
+    <div class="row">
+      <div class="node main single">
+        <h3><span class="dot"></span>Main agent session</h3>
+        <p>Owns the work queue. Splits work into <b>independent units</b>, fans out a <b>bounded wave</b> of wrapper subagents in parallel, and merges their results into one durable artifact as each lands.</p>
+      </div>
+    </div>
+
+    <div class="arrow">│ &nbsp; <b>dispatch a bounded wave</b> · run concurrently &nbsp; │<br>▼ ▼ ▼</div>
+
+    <p class="tier-label">Layer 1 · Wrapper subagent (one per work unit)</p>
+    <div class="row">
+      <div class="node claude">
+        <h3><span class="dot"></span>Wrapper A</h3>
+        <p>Gather bundle → call expert → verify → report.</p>
+      </div>
+      <div class="node claude">
+        <h3><span class="dot"></span>Wrapper B</h3>
+        <p>Same recipe, different unit. Runs concurrently.</p>
+      </div>
+      <div class="node claude">
+        <h3><span class="dot"></span>Wrapper C</h3>
+        <p>Same recipe, different unit. Runs concurrently.</p>
+      </div>
+    </div>
+    <div class="steps">
+      <div class="step"><b>1 · Gather INPUTS</b><br>the material this unit must analyze</div>
+      <div class="step"><b>2 · Gather GROUND TRUTH</b><br>the sources to check the answer against</div>
+      <div class="step"><b>3 · Assemble BUNDLE</b><br>full-depth, high-signal context</div>
+    </div>
+
+    <div class="arrow">▼ &nbsp; <b>MCP call</b> · ask the expert (question + context bundle) &nbsp; ▼</div>
+
+    <p class="tier-label">Layer 2 · Expert model (via MCP)</p>
+    <div class="row">
+      <div class="node gpt single">
+        <h3><span class="dot"></span>Expert model</h3>
+        <p>The specialist — ideally a <b>different model family</b> from the one orchestrating/building. Does the deep reasoning, and its output is treated as <b>hypotheses</b> to verify.</p>
+      </div>
+    </div>
+
+    <div class="arrow">▲ &nbsp; raw output flows back into the wrapper &nbsp; ▲</div>
+
+    <p class="tier-label">Layer 1 · verification gate (back in the wrapper)</p>
+    <div class="row">
+      <div class="node claude">
+        <h3><span class="dot"></span>VERIFIED</h3>
+        <p>Holds up against ground truth → kept, tagged, with a citation.</p>
+      </div>
+      <div class="node claude">
+        <h3><span class="dot"></span>FALSE</h3>
+        <p>Refuted by ground truth → dropped or noted as a false claim.</p>
+      </div>
+      <div class="node claude">
+        <h3><span class="dot"></span>UNCERTAIN</h3>
+        <p>Can't confirm → flagged for human follow-up.</p>
+      </div>
+    </div>
+
+    <div class="arrow">▼ &nbsp; compact, ground-truth-checked result returned to orchestrator &nbsp; ▼</div>
+    <div class="row">
+      <div class="node main single">
+        <h3><span class="dot"></span>Durable artifact</h3>
+        <p>Appended as each unit returns → survives context compaction / restarts.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────── WHY ───────────── -->
+  <h2>Why wrap the expert (the point of the pattern)</h2>
+  <table>
+    <tr><th>Concern</th><th>Calling the MCP expert directly from your main loop</th><th>Wrapping it in subagents</th></tr>
+    <tr>
+      <td><b>Context bloat</b></td>
+      <td class="naive">Every input the expert needs is read into your main context → it fills, compaction kicks in, working state is lost.</td>
+      <td>Bundle assembly happens <b>inside each subagent</b>; the main loop only sees the compact result. <span class="tag t-ok">cheap</span></td>
+    </tr>
+    <tr>
+      <td><b>Parallelism</b></td>
+      <td class="naive">Calls from the main loop are effectively serial.</td>
+      <td>Subagents run <b>truly concurrently</b> in bounded waves. <span class="tag t-ok">fast</span></td>
+    </tr>
+    <tr>
+      <td><b>Unverified claims</b></td>
+      <td class="naive">Expert output is consumed as-is → false claims get acted on, wasting effort or adding errors.</td>
+      <td>Subagent <b>verifies each claim against ground truth</b> before it surfaces. <span class="tag t-crit">safety</span></td>
+    </tr>
+    <tr>
+      <td><b>Shared blind spots</b></td>
+      <td class="naive">If the expert is the same model doing the work, it shares your failure modes.</td>
+      <td>A <b>different model family</b> surfaces issues a self-pass would miss. <span class="tag t-high">rigor</span></td>
+    </tr>
+    <tr>
+      <td><b>Durability</b></td>
+      <td class="naive">Results live only in the conversation → lost on compaction/restart.</td>
+      <td>Each result written to a durable artifact as it returns. <span class="tag t-ok">durable</span></td>
+    </tr>
+  </table>
+
+  <!-- ───────────── FIVE MOVES ───────────── -->
+  <h2>The five moves</h2>
+  <ol class="moves">
+    <li><b>Split</b> the work into independent units the orchestrator can dispatch without shared state.</li>
+    <li><b>Bundle</b> — each wrapper gathers a tight, high-signal set: the material to analyze <b>plus the ground-truth sources</b> to check it against. Read only what's relevant, but give the expert depth, not a summary.</li>
+    <li><b>Call</b> the expert over MCP with a pointed question + the bundle as context.</li>
+    <li><b>Verify</b> — treat output as hypotheses; check each claim against ground truth and tag it <code>VERIFIED</code> / <code>FALSE</code> / <code>UNCERTAIN</code>.</li>
+    <li><b>Aggregate</b> — return a compact result; the orchestrator appends it to a durable artifact as each unit completes.</li>
+  </ol>
+
+  <!-- ───────────── BUNDLE ───────────── -->
+  <h2>What goes in each bundle</h2>
+  <p>A reviewer is only as good as its inputs. Give the expert depth — never ask for a "concise" answer when the task is a deep analysis:</p>
+  <div class="bundle">
+    <div class="bcard"><h4>① The material</h4><p>The actual thing to analyze (code, document, design, dataset slice).</p></div>
+    <div class="bcard"><h4>② Ground truth</h4><p>The authoritative sources to check the answer against (specs, requirements, source of record).</p></div>
+    <div class="bcard"><h4>③ The ask</h4><p>A pointed, critical question framing exactly what to evaluate and against what.</p></div>
+  </div>
+
+  <!-- ───────────── GUIDELINES ───────────── -->
+  <h2>Operating guidelines</h2>
+  <ul>
+    <li><b>Bounded waves, not unbounded fan-out.</b> Run a small number of expert calls concurrently (e.g. ~3) — massive parallel dispatch tends to hit MCP/client timeouts and contention.</li>
+    <li><b>Write results incrementally</b> to the durable artifact <i>as they return</i>, so a mid-wave failure never loses completed work.</li>
+    <li><b>Pick an expert from a different model family</b> than the one building/orchestrating — diverse blind spots are the whole point.</li>
+    <li><b>Use high reasoning effort</b> on the expert when the task is a deep audit/critique, not a quick lookup.</li>
+    <li><b>Never skip the verification gate</b> — a confident wrong answer that gets acted on is worse than no answer.</li>
+  </ul>
+
+  <!-- ───────────── WHEN ───────────── -->
+  <h2>When to reach for it</h2>
+  <div class="callout">
+    Use this whenever you want an external / second-opinion model (or any MCP tool prone to confident-but-wrong output) <b>without</b> (1) flooding your main context, (2) serializing your work, or (3) blindly trusting the result. Typical fits: code/security review, design critique, threat modeling, cross-checking research, or analyzing material too large to hold in the main context.
+    <br><br>
+    <b>The reusable idea, in one line:</b> <i>wrap an external MCP expert in a subagent that bundles → calls → verifies, so the main loop only ever sees trustworthy, compact conclusions.</i>
+  </div>
+
+  <p class="footer">Companion to <code>two-layer-cross-model-expert.md</code></p>
+</div>
+</body>
+</html>

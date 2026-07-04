@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Worker Orchestrator Pattern</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --ink:#e6edf3; --muted:#8b949e;
+    --claude:#d97757; --gpt:#10a37f; --main:#6e7bf2; --edge:#30363d;
+    --crit:#f85149; --high:#d29922; --ok:#3fb950;
+    --mono:'SF Mono',ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;padding:40px 20px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:30px;margin:0 0 6px}
+  .sub{color:var(--muted);margin:0 0 28px;font-size:15px}
+  h2{font-size:20px;margin:40px 0 14px;border-bottom:1px solid var(--edge);padding-bottom:8px}
+  code{font-family:var(--mono);background:#1f2630;padding:2px 6px;border-radius:5px;font-size:13px}
+
+  /* ── flow diagram ── */
+  .flow{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:30px 24px;margin:18px 0}
+  .tier-label{font-family:var(--mono);font-size:12px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin:0 0 10px}
+  .row{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+  .node{flex:1;min-width:210px;border-radius:12px;padding:16px 16px;border:1px solid var(--edge);background:var(--panel2)}
+  .node h3{margin:0 0 6px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .node p{margin:0;font-size:13px;color:var(--muted)}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:0 0 auto}
+  .main .dot{background:var(--main)} .claude .dot{background:var(--claude)} .gpt .dot{background:var(--gpt)}
+  .main{border-color:var(--main)} .claude{border-color:var(--claude)} .gpt{border-color:var(--gpt)}
+  .arrow{text-align:center;color:var(--muted);font-size:13px;margin:12px 0;font-family:var(--mono)}
+  .arrow b{color:var(--ink)}
+  .single{max-width:580px;margin:0 auto}
+
+  /* ── steps inside wrapper subagent ── */
+  .steps{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .step{flex:1;min-width:130px;background:#11161e;border:1px dashed var(--edge);border-radius:9px;padding:10px;font-size:12px}
+  .step b{color:var(--claude)}
+
+  /* ── why table ── */
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+  th,td{border:1px solid var(--edge);padding:10px 12px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+  td.naive{color:var(--muted)}
+  .tag{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:20px;font-weight:600}
+  .t-crit{background:rgba(248,81,73,.15);color:var(--crit)}
+  .t-high{background:rgba(210,153,34,.15);color:var(--high)}
+  .t-ok{background:rgba(63,185,80,.15);color:var(--ok)}
+
+  .callout{background:var(--panel);border:1px solid var(--edge);border-left:3px solid var(--main);border-radius:9px;padding:14px 16px;margin:14px 0;font-size:14px}
+  .footer{color:var(--muted);font-size:12px;margin-top:40px;text-align:center}
+  ul{margin:8px 0 0;padding-left:20px} li{margin:5px 0;font-size:14px}
+  ol.moves{counter-reset:m;list-style:none;padding-left:0}
+  ol.moves li{position:relative;padding:10px 12px 10px 46px;margin:8px 0;background:var(--panel);border:1px solid var(--edge);border-radius:9px}
+  ol.moves li::before{counter-increment:m;content:counter(m);position:absolute;left:12px;top:10px;width:24px;height:24px;border-radius:50%;background:var(--main);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px}
+  ol.moves b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Worker Orchestrator Pattern</h1>
+  <p class="sub">The <b>no-gate sibling</b> of the two-layer expert pattern: fan <b>concrete implementation work</b> out to the OpenRouter worker (the <code>ask_openrouter</code> tool with a fast model) through cheap Sonnet wrapper subagents — and let <b>execution</b>, not a verification gate, decide it's correct.</p>
+
+  <!-- ───────────── FLOW DIAGRAM ───────────── -->
+  <div class="flow">
+    <p class="tier-label">Layer 0 · Orchestrator</p>
+    <div class="row">
+      <div class="node main single">
+        <h3><span class="dot"></span>Main agent session</h3>
+        <p>Splits work into <b>independent units</b>, fans out a <b>bounded wave</b> of Sonnet wrapper subagents in parallel, and merges their results into one durable artifact as each lands.</p>
+      </div>
+    </div>
+
+    <div class="arrow">│ &nbsp; <b>dispatch a bounded wave</b> · run concurrently &nbsp; │<br>▼ ▼ ▼</div>
+
+    <p class="tier-label">Layer 1 · Wrapper subagent (Sonnet, one per work unit)</p>
+    <div class="row">
+      <div class="node claude"><h3><span class="dot"></span>Wrapper A</h3><p>Bundle → call worker → integrate → report.</p></div>
+      <div class="node claude"><h3><span class="dot"></span>Wrapper B</h3><p>Same recipe, different unit. Runs concurrently.</p></div>
+      <div class="node claude"><h3><span class="dot"></span>Wrapper C</h3><p>Same recipe, different unit. Runs concurrently.</p></div>
+    </div>
+    <div class="steps">
+      <div class="step"><b>1 · Gather INPUTS</b><br>the code, failing test, stack trace, surrounding files</div>
+      <div class="step"><b>2 · Assemble BUNDLE</b><br>a tight, high-signal task + context</div>
+      <div class="step"><b>3 · No ground-truth gate</b><br>correctness comes from running it, not checking claims</div>
+    </div>
+
+    <div class="arrow">▼ &nbsp; <b>MCP call</b> · ask_openrouter (fast model) with the task + bundle &nbsp; ▼</div>
+
+    <p class="tier-label">Layer 2 · OpenRouter worker (via MCP)</p>
+    <div class="row">
+      <div class="node gpt single">
+        <h3><span class="dot"></span>ask_openrouter · fast model</h3>
+        <p>Produces a <b>concrete artifact</b> — a patch, a fix, a test, a repo-inspection answer. No/low reasoning effort; this is the do-the-work path, not the deep-reasoning one.</p>
+      </div>
+    </div>
+
+    <div class="arrow">▲ &nbsp; artifact flows back into the wrapper &nbsp; ▲</div>
+
+    <p class="tier-label">Layer 1 · integrate (back in the wrapper)</p>
+    <div class="row">
+      <div class="node claude single">
+        <h3><span class="dot"></span>Integrate &amp; sanity-check</h3>
+        <p>Apply / normalize the patch, extract the answer, and check it parses and addresses the task. No claim-by-claim verification gate.</p>
+      </div>
+    </div>
+
+    <div class="arrow">▼ &nbsp; <b>VALIDATE BY EXECUTION</b> — build · run tests · apply patch &nbsp; ▼</div>
+    <div class="row">
+      <div class="node main"><h3><span class="dot"></span>Passes</h3><p>Build / tests green → keep it; append to the durable artifact.</p></div>
+      <div class="node main"><h3><span class="dot"></span>Fails</h3><p>Build / tests red → bounce it back as a new work unit. This is the "gate," and it is empirical.</p></div>
+    </div>
+  </div>
+
+  <!-- ───────────── WHY ───────────── -->
+  <h2>Why wrap the worker (the point of the pattern)</h2>
+  <table>
+    <tr><th>Concern</th><th>Calling ask_openrouter directly from your main loop</th><th>Wrapping it in Sonnet subagents</th></tr>
+    <tr>
+      <td><b>Context bloat</b></td>
+      <td class="naive">Every file / stack trace the worker needs is read into your main context.</td>
+      <td>Bundle assembly happens <b>inside each subagent</b>; the main loop only sees the compact result. <span class="tag t-ok">cheap</span></td>
+    </tr>
+    <tr>
+      <td><b>Parallelism</b></td>
+      <td class="naive">Calls from the main loop are effectively serial.</td>
+      <td>Subagents run <b>truly concurrently</b> in bounded waves. <span class="tag t-ok">fast</span></td>
+    </tr>
+    <tr>
+      <td><b>Cost</b></td>
+      <td class="naive">Orchestrator-model tokens spent shuttling raw inputs.</td>
+      <td>A <b>cheap Sonnet wrapper</b> does the shuttling. <span class="tag t-ok">cheap</span></td>
+    </tr>
+    <tr>
+      <td><b>Durability</b></td>
+      <td class="naive">Results live only in the conversation → lost on compaction / restart.</td>
+      <td>Each result written to a durable artifact as it returns. <span class="tag t-ok">durable</span></td>
+    </tr>
+  </table>
+  <div class="callout">The deliberately <b>absent</b> row is a <b>verification gate</b>. Worker output is a runnable artifact, so it's validated by <b>execution</b> (build / tests) — not trusted as a claim. That's the one intentional difference from <code>two-layer-cross-model-expert</code>, which <i>does</i> verify claims against ground truth. Reach for that one when the output is a judgment you must trust before acting.</div>
+
+  <!-- ───────────── MOVES ───────────── -->
+  <h2>The moves</h2>
+  <ol class="moves">
+    <li><b>Split</b> the work into independent units (separate files, bugs, refactors).</li>
+    <li><b>Bundle</b> — each wrapper gathers a tight, high-signal input set for its unit.</li>
+    <li><b>Call</b> <code>ask_openrouter</code> with a precise task + the bundle, choosing a fast model.</li>
+    <li><b>Integrate</b> — turn the output into a usable artifact; do a light sanity check.</li>
+    <li><b>Validate by execution</b> — build, run tests, apply the patch. A failure becomes a new work unit.</li>
+    <li><b>Aggregate</b> — append each unit's result to a durable artifact as it returns.</li>
+  </ol>
+
+  <!-- ───────────── WORKER VS EXPERT ───────────── -->
+  <h2>Worker vs. expert — same tool, different pattern</h2>
+  <p>There's a single <code>ask_openrouter</code> tool. Which role it plays is your choice of pattern, model, and effort:</p>
+  <table>
+    <tr><th></th><th>worker-orchestrator (this)</th><th>two-layer-cross-model-expert</th></tr>
+    <tr><td><b>Output</b></td><td class="naive">Concrete artifacts: patches, fixes, tests.</td><td>Judgments: reviews, critiques, threat models.</td></tr>
+    <tr><td><b>Correctness</b></td><td class="naive">Checked by <b>running it</b>.</td><td>Checked by <b>verifying claims</b> vs ground truth.</td></tr>
+    <tr><td><b>Wrapper</b></td><td class="naive">Cheap Sonnet, <b>no</b> gate.</td><td>Heavier wrapper <b>+</b> a verification gate.</td></tr>
+    <tr><td><b>ask_openrouter call</b></td><td class="naive">Fast model.</td><td>Strong model + <code>reasoning_effort: high</code>.</td></tr>
+  </table>
+
+  <!-- ───────────── GUIDELINES ───────────── -->
+  <h2>Operating guidelines</h2>
+  <ul>
+    <li><b>Bounded waves (~3 concurrent)</b> — avoids MCP / client timeouts and contention.</li>
+    <li><b>Validate by running, every time</b> — never merge a worker artifact you haven't built / tested.</li>
+    <li><b>Keep the wrapper cheap (Sonnet).</b> If a unit needs claim-verification (an assertion about the system, not a runnable artifact), switch it to the two-layer pattern.</li>
+    <li><b>Write results incrementally</b> to a durable artifact so a mid-wave failure loses nothing.</li>
+  </ul>
+
+  <div class="callout"><b>The reusable idea, in one line:</b> <i>fan concrete work out to a cheap wrapper around the OpenRouter worker, and let execution — not a verification gate — be the thing that decides it's correct.</i></div>
+
+  <p class="footer">Companion to <code>worker-orchestrator.md</code></p>
+</div>
+</body>
+</html>
