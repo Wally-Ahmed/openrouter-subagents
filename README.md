@@ -1,6 +1,6 @@
 # openrouter-subagents
 
-An MCP server that exposes a GPT/Claude/Gemini-agnostic "subagent" tool backed by
+An MCP server **and CLI** that exposes a GPT/Claude/Gemini-agnostic "subagent" tool backed by
 **[OpenRouter](https://openrouter.ai)** — one API key, every model. It defaults to **OpenRouter
 Fusion** (`openrouter/fusion`), which runs a *panel* of models in parallel and has a judge model
 synthesize them into a single answer. Sibling to
@@ -39,6 +39,39 @@ it offers.
 | `reasoning_enabled` | Turn default-strength reasoning on/off without picking a level or budget. |
 | `reasoning_exclude` | Model still reasons, but the reasoning tokens aren't returned in the response. |
 | `temperature` | Sampling temperature, 0–2 (lower = more deterministic). Applied when the model supports it; OpenRouter drops it for models that don't. |
+
+---
+
+## CLI
+
+Everything the MCP server does is also available as a plain shell command — same client, same
+patterns library, but the answer comes back as **raw text on stdout with zero JSON-RPC framing**.
+For agents that can run shell commands, this is the token-cheap way to delegate: no MCP envelope
+in either direction, and piped stdin means large inputs (diffs, logs, files) never have to be
+echoed through the model's context at all.
+
+```bash
+npm run build        # compiles dist/cli.js
+npm link             # optional: puts `openrouter-subagents` on your PATH
+
+# ask (the subcommand is optional); raw answer on stdout
+openrouter-subagents "why is the sky blue?"
+openrouter-subagents ask -m anthropic/claude-haiku-4.5 -e xhigh "prove sqrt(2) is irrational"
+
+# piped stdin becomes the prompt — or the context when a prompt is given
+git diff | openrouter-subagents ask -p "review this diff for bugs" -e high
+openrouter-subagents ask -p "summarize" --context-file big-report.md -m openai/gpt-5-mini
+
+# patterns
+openrouter-subagents patterns
+openrouter-subagents pattern two-layer-cross-model-expert
+```
+
+Flags mirror the MCP tool: `-m/--model`, `-i/--instructions` (defaults to a terse expert prompt),
+`-p/--prompt`, `-c/--context` (each with a `--*-file` variant), `-e/--effort`
+(`none`…`max`), `--reasoning-tokens <n>`, `--reasoning on|off`, `--hide-reasoning`,
+`-t/--temperature`, and Fusion's `--analysis-models` / `--judge`. `--help` shows the full
+reference. Exit codes: `0` success, `2` usage error, `1` API/network error.
 
 ---
 

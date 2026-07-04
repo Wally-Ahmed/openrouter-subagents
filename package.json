@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "description": "MCP server that lets Claude Code delegate to any OpenRouter model as an expert subagent (a single ask_openrouter tool), defaulting to OpenRouter Fusion multi-model synthesis, with a library of orchestration patterns. Uses your OpenRouter API key.",
   "main": "dist/server.js",
+  "bin": {
+    "openrouter-subagents": "dist/cli.js"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/cli.js",
     "start": "node dist/server.js",
+    "cli": "node dist/cli.js",
     "test": "vitest run"
   },
   "keywords": [],
