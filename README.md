@@ -1,6 +1,6 @@
 # openrouter-subagents
 
-An MCP server **and CLI** that exposes a GPT/Claude/Gemini-agnostic "subagent" tool backed by
+An MCP server **and CLI** that exposes a model-agnostic "subagent" tool backed by
 **[OpenRouter](https://openrouter.ai)** — one API key, every model. It defaults to **OpenRouter
 Fusion** (`openrouter/fusion`), which runs a *panel* of models in parallel and has a judge model
 synthesize them into a single answer. Sibling to

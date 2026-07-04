@@ -1,7 +1,7 @@
 {
   "name": "openrouter-subagents",
   "version": "1.0.0",
-  "description": "MCP server that lets Claude Code delegate to any OpenRouter model as an expert subagent (a single ask_openrouter tool), defaulting to OpenRouter Fusion multi-model synthesis, with a library of orchestration patterns. Uses your OpenRouter API key.",
+  "description": "MCP server and CLI that lets Claude Code delegate to any OpenRouter model as a subagent (a single ask_openrouter tool), defaulting to OpenRouter Fusion multi-model synthesis, with a library of orchestration patterns. Uses your OpenRouter API key.",
   "main": "dist/server.js",
   "bin": {
     "openrouter-subagents": "dist/cli.js"
