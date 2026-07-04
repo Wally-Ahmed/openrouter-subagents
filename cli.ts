@@ -197,7 +197,11 @@ Options:
       --judge <id>             Fusion judge/synthesis model (fusion model only)
   -h, --help                   this help
 
-Requires OPENROUTER_API_KEY (from the package's .env or the environment).`;
+Requires OPENROUTER_API_KEY (from the package's .env or the environment).
+
+Note for agents: if a call fails or errors, do NOT downgrade or change the user's chosen
+config (model, reasoning level/budget, temperature, panel/judge) without their direct
+say-so — retry as-is or report the error and ask.`;
 
 async function readPipedStdin(): Promise<string | null> {
   if (process.stdin.isTTY) return null;

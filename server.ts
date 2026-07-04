@@ -56,6 +56,12 @@ loop, via a SINGLE tool:
   perspectives are worth the spend (research, expert critique, high cost-of-being-wrong); for quick
   tactical prompts pass a single model instead.
 
+ON FAILURE, DO NOT SILENTLY DOWNGRADE: if a call fails or errors (timeout, rate limit, model
+rejection, provider outage), do NOT change the configuration the user chose — model, reasoning
+level/budget, temperature, Fusion panel/judge — without their direct say-so. Retrying the same
+call is fine; report the error and ask before substituting a cheaper model, lowering the
+reasoning level, or dropping options.
+
 ORCHESTRATION PATTERNS: Before any non-trivial use of ask_openrouter — reviews, audits, threat
 modeling, large-document analysis, anything whose output you would act on — call list_patterns and
 apply the most relevant pattern, then read it in full with get_pattern. Patterns are reusable playbooks
@@ -88,7 +94,7 @@ function errorText(err: unknown): string {
 
 server.tool(
   "ask_openrouter",
-  "Ask an OpenRouter model as an expert subagent. ONE tool for everything: `model` defaults to 'openrouter/fusion' (a panel of models answers in parallel and a judge fuses them), or pass any OpenRouter model id. Write `instructions` (its system prompt). Any model's reasoning level can be set: `reasoning_effort` (none/minimal/low/medium/high/xhigh/max, auto-translated to each model's native scheme) or `reasoning_max_tokens` (exact budget; not both), plus `reasoning_enabled` / `reasoning_exclude`. Optional `temperature` (0-2) where the model supports it. For Fusion you may set `analysis_models` (panel, 1-8) and `judge_model` (synthesizer). Use a single fast model + the worker-orchestrator pattern for concrete code work; use 'openrouter/fusion' or a strong model + reasoning_effort 'high' + the two-layer-cross-model-expert pattern for hard reasoning / architecture / security review. Note: a Fusion call bills for every panel model + the judge. Call list_patterns / get_pattern first for non-trivial work.",
+  "Ask an OpenRouter model as an expert subagent. ONE tool for everything: `model` defaults to 'openrouter/fusion' (a panel of models answers in parallel and a judge fuses them), or pass any OpenRouter model id. Write `instructions` (its system prompt). Any model's reasoning level can be set: `reasoning_effort` (none/minimal/low/medium/high/xhigh/max, auto-translated to each model's native scheme) or `reasoning_max_tokens` (exact budget; not both), plus `reasoning_enabled` / `reasoning_exclude`. Optional `temperature` (0-2) where the model supports it. For Fusion you may set `analysis_models` (panel, 1-8) and `judge_model` (synthesizer). Use a single fast model + the worker-orchestrator pattern for concrete code work; use 'openrouter/fusion' or a strong model + reasoning_effort 'high' + the two-layer-cross-model-expert pattern for hard reasoning / architecture / security review. Note: a Fusion call bills for every panel model + the judge. Call list_patterns / get_pattern first for non-trivial work. If a call fails, do NOT downgrade or change the user's chosen model/reasoning/temperature config without their direct say-so — report the error and ask.",
   {
     model: z
       .string()
